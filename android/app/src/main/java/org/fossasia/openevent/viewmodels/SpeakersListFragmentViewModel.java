@@ -1,23 +1,21 @@
 package org.fossasia.openevent.viewmodels;
 
 import android.arch.lifecycle.LiveData;
-import android.arch.lifecycle.MutableLiveData;
+import android.arch.lifecycle.Transformations;
 import android.arch.lifecycle.ViewModel;
 
 import org.fossasia.openevent.data.Speaker;
+import org.fossasia.openevent.dbutils.LiveRealmData;
 import org.fossasia.openevent.dbutils.RealmDataRepository;
 
 import java.util.List;
 
-import io.realm.RealmResults;
-
 import static org.fossasia.openevent.utils.SortOrder.sortOrderSpeaker;
 
-public class SpeakersListFragmentViewModel extends ViewModel{
+public class SpeakersListFragmentViewModel extends ViewModel {
 
-    private MutableLiveData<List<Speaker>> speakersList;
+    private LiveData<List<Speaker>> speakersList;
     private RealmDataRepository realmRepo;
-    private RealmResults<Speaker> realmResults;
     private String searchText = "";
     private int speakersListSortType = 0;
 
@@ -26,16 +24,10 @@ public class SpeakersListFragmentViewModel extends ViewModel{
     }
 
     public LiveData<List<Speaker>> getSpeakers(int sortType) {
-        if (speakersList == null || sortType != speakersListSortType) {
-            if (speakersList == null) {
-                speakersList = new MutableLiveData<>();
-            }
-            clearListeners();
-            realmResults = realmRepo.getSpeakers(sortOrderSpeaker());
+        if (sortType != speakersListSortType || speakersList == null) {
+            LiveRealmData<Speaker> speakerLiveRealmData = RealmDataRepository.asLiveData(realmRepo.getSpeakers(sortOrderSpeaker()));
+            speakersList = Transformations.map(speakerLiveRealmData, input -> input);
             speakersListSortType = sortType;
-            realmResults.addChangeListener((speakers, orderedCollectionChangeSet) -> {
-                speakersList.setValue(speakers);
-            });
         }
         return speakersList;
     }
@@ -48,15 +40,4 @@ public class SpeakersListFragmentViewModel extends ViewModel{
         this.searchText = searchText;
     }
 
-    private void clearListeners() {
-        if (realmResults != null) {
-            realmResults.removeAllChangeListeners();
-        }
-    }
-
-    @Override
-    protected void onCleared() {
-        clearListeners();
-        super.onCleared();
-    }
 }

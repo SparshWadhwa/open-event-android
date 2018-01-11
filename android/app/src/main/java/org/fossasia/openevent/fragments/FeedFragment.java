@@ -1,6 +1,7 @@
 package org.fossasia.openevent.fragments;
 
 import android.app.ProgressDialog;
+import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.design.widget.Snackbar;
 import android.support.v4.widget.SwipeRefreshLayout;
@@ -15,6 +16,7 @@ import org.fossasia.openevent.R;
 import org.fossasia.openevent.adapters.FeedAdapter;
 import org.fossasia.openevent.api.APIClient;
 import org.fossasia.openevent.data.facebook.FeedItem;
+import org.fossasia.openevent.modules.OnImageZoomListener;
 import org.fossasia.openevent.utils.ConstantStrings;
 import org.fossasia.openevent.utils.NetworkUtils;
 import org.fossasia.openevent.utils.SharedPreferencesUtil;
@@ -26,6 +28,7 @@ import java.util.List;
 
 import butterknife.BindView;
 import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 import timber.log.Timber;
 
@@ -37,6 +40,7 @@ public class FeedFragment extends BaseFragment {
     private FeedAdapter feedAdapter;
     private List<FeedItem> feedItems;
     private ProgressDialog downloadProgressDialog;
+    private Disposable feedLoaderDisposable;
 
     @BindView(R.id.feed_swipe_refresh) SwipeRefreshLayout swipeRefreshLayout;
     @BindView(R.id.feed_recycler_view) RecyclerView feedRecyclerView;
@@ -51,7 +55,8 @@ public class FeedFragment extends BaseFragment {
         feedItems = new ArrayList<>();
         RecyclerView.LayoutManager mLayoutManager = new LinearLayoutManager(getContext());
         feedRecyclerView.setLayoutManager(mLayoutManager);
-        feedAdapter = new FeedAdapter(getContext(), (FeedAdapter.AdapterCallback)getActivity(), feedItems);
+        feedAdapter = new FeedAdapter(getContext(), (FeedAdapter.OpenCommentsDialogListener)getActivity(), feedItems);
+        feedAdapter.setOnImageZoomListener((OnImageZoomListener)getActivity());
         feedRecyclerView.setAdapter(feedAdapter);
 
         setupProgressBar();
@@ -73,7 +78,7 @@ public class FeedFragment extends BaseFragment {
             return;
         }
 
-        APIClient.getFacebookGraphAPI()
+        feedLoaderDisposable = APIClient.getFacebookGraphAPI()
                 .getPosts(SharedPreferencesUtil.getString(ConstantStrings.FACEBOOK_PAGE_ID, null),
                         getContext().getResources().getString(R.string.fields),
                         getContext().getResources().getString(R.string.facebook_access_token))
@@ -159,10 +164,30 @@ public class FeedFragment extends BaseFragment {
         downloadProgressDialog.setCancelable(false);
         String shownMessage = String.format(getString(R.string.downloading_format), getString(R.string.menu_feed));
         downloadProgressDialog.setMessage(shownMessage);
+        downloadProgressDialog.setButton(DialogInterface.BUTTON_NEGATIVE, getString(R.string.cancel), (dialogInterface, i) -> {
+            downloadProgressDialog.dismiss();
+            disposeRxSubscriptions();
+            getActivity().onBackPressed();
+        });
+    }
+
+    private void disposeRxSubscriptions() {
+        if (feedLoaderDisposable != null && !feedLoaderDisposable.isDisposed()) {
+            feedLoaderDisposable.dispose();
+        }
     }
 
     @Override
     protected int getLayoutResource() {
         return R.layout.list_feed;
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (feedAdapter != null) {
+            feedAdapter.removeOnImageZoomListener();
+            feedAdapter.removeOpenCommentsDialogListener();
+        }
     }
 }
